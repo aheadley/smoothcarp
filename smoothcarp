@@ -1,1 +1,17 @@
 #!/usr/bin/env python
+
+import libsmoothcarp
+import gobject
+import sys
+import tty
+from time import sleep
+
+SMOOTHCARP_VERSION  = '0.1'
+
+def main():
+    print 'Starting Smoothcarp v%s' % SMOOTHCARP_VERSION
+    player = libsmoothcarp.Player()
+    gobject.MainLoop().run()
+    
+if __name__ == '__main__':
+    main()

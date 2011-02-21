@@ -1,6 +1,7 @@
 import hashlib
 import json
 import urllib2
+from time import time
 
 class ApiException(Exception):
     pass
@@ -76,8 +77,11 @@ class Api(object):
         'Artists',
     ]
     
+    _COMM_TOKEN_SHELFLIFE = 60 * 15 #15 minutes (total guess)
+    
     def __init__(self):
         self._id_tokens = {}
+        self._comm_token_timestamp = 0
         self._http_client_cookies = urllib2.HTTPCookieProcessor()
         self._http_client = urllib2.build_opener(self._http_client_cookies)
         
@@ -108,29 +112,27 @@ class Api(object):
             data['client_revision'] = self.HTML_CLIENT_REVISION
         return data
     
-    def _get_country(self):
+    def get_country(self):
         return {'ID': '223','CC1': '0','CC2': '0','CC3': '0','CC4': '1073741824','IPR': '82'}
     
     def _build_request(self, method, parameters=None):
         method_data = self._get_method_request_data(method)
         request = urllib2.Request(method_data['url'])
         request.add_header('Content-Type', 'application/json')
+        request.add_header('User-Agent', 'Smoothcarp/0.1')
         request_data = {
             'header': {
                 'client': method_data['client'],
                 'clientRevision': method_data['client_revision'],
                 'privacy': 0,
-                'country': self._get_country(),
+                'country': self.get_country(),
                 'session': self._get_php_session(),
             },
             'method': method,
             'parameters': parameters,
         }
         if method != 'getCommunicationToken':
-            try:
-                request_data['header']['token'] = self._get_auth_token(method)
-            except KeyError:
-                pass
+            request_data['header']['token'] = self._get_auth_token(method)
         request.add_data(json.dumps(request_data))
         return request
     
@@ -158,10 +160,12 @@ class Api(object):
         return self._id_tokens['php_session']
     
     def _get_comm_token(self):
-        #this has a short shelf life (30 min maybe?), need to check it
         try:
+            if int(time()) - self._comm_token_timestamp > self._COMM_TOKEN_SHELFLIFE:
+                del self._id_tokens['comm_token']
             return self._id_tokens['comm_token']
         except KeyError:
+            self._comm_token_timestamp = int(time())
             self._id_tokens['comm_token'] = self.getCommunicationToken(secretKey=self._get_secret_key())
         return self._id_tokens['comm_token']
     
