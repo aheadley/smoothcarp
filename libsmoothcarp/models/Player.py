@@ -1,8 +1,7 @@
-from urllib2 import urlopen
-from urllib import quote_plus
 from random import randint
-import gst
+from urllib import quote_plus
 from Api import Api
+from PlayerProcess import PlayerProcess
 
 class Player(object):
     """Audio Player wrapper object"""
@@ -11,24 +10,34 @@ class Player(object):
     
     def __init__(self):
         self.__api = Api()
-        self.__player = gst.element_factory_make('playbin2', 'player')
+        self.__player = PlayerProcess()
         self.__song_queue = []
-        self.__song_queue_position = 0
+        self.__song_queue_position = None
+        self.__playing = False
         self.__shuffle = False
         self.__repeat = False
-        self.__init_player()
         
     def play(self):
-        self.__player.set_property('uri', self.__get_song_url(self.__song_queue[self.__song_queue_position]))
-        self.__player.set_state(gst.STATE_PLAYING)
+        if not self.__playing:
+            if self.__song_queue_position is None:
+                pass
+            else:
+                self.__player.set_song(self.__get_song_url(
+                    self.__song_queue[self.__song_queue_position]))
+                self.__player.play()
+                self.__playing = True
 
     def stop(self):
-        self.__player.set_state(gst.STATE_NULL)
+        self.__player.stop()
+        self.__playing = False
         
     def pause(self):
-        self.__player.set_state(gst.STATE_PAUSED)
+        self.__player.pause()
+        self.__playing = False
         
-    def is_playing(self): pass
+    def is_playing(self):
+        return self.__playing
+    
     def next(self):
         self.stop()
         self.__song_queue_position = self.__get_next(self.__song_queue_position)
@@ -61,17 +70,21 @@ class Player(object):
 
     def add_song_to_queue(self, song_id):
         if song_id not in self.__song_queue:
-            self.__song_queue.append(song_id)
+            self.__song_queue.append(int(song_id))
+            if self.__song_queue_position is None:
+                self.__song_queue_position = 0
             
     def remove_song_from_queue(self, song_id):
         if song_id in self.__song_queue:
             if song_id is self.__song_queue[self.__song_queue_position]:
                 self.next()
             self.__song_queue.remove(song_id)
+            if len(self.__song_queue) is 0:
+                self.__song_queue_position = None
             
     def add_playlist_to_queue(self, playlist_id):
         #playlist = getplaylist(playlist_id)
-        #for id in [song[SongID] for song in playlist]: song_queue.append(id)
+        #for id in [int(song[SongID]) for song in playlist]: song_queue.append(id)
         pass
     
     def clear_queue(self):
@@ -83,9 +96,6 @@ class Player(object):
     
     def get_queue_song(self, offset):
         return self.__song_queue[self.__constrain_offset(offset)]
-    
-    def search(self, query_string):
-        return self.__api.getSearchResultsEx(query=query_string, type='Songs')
     
     def __constrain_offset(self, offset):
         return max(min(offset, len(self.__song_queue)), 0)
@@ -114,13 +124,4 @@ class Player(object):
             prefetch=False,
             songID=int(song_id))
         return self._STREAM_URL % (streamkey_info['ip'], quote_plus(streamkey_info['streamKey']))
-    
-    def __init_player(self):
-        self.__player.set_property('video-sink', gst.element_factory_make('fakesink', 'fakesink'))
-        bus = self.__player.get_bus()
-        bus.add_signal_watch()
-        bus.connect('message', self.__on_message)
-        
-    def __on_message(self, bus, message):
-        pass
     
