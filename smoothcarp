@@ -3,24 +3,57 @@
 import glib
 import gobject
 import gst
+import threading
 import os.path
-import thread
 import sys
 import time
 import grooveshark
-from urllib import quote_plus
 
 __version__ = '0.1.0'
 
+class InputHandlerThread(threading.Thread):
+    LINEMODE_CHAR   = 0
+    LINEMODE_LINE   = 1
+    
+    def __init__(self, input_callback):
+        Thread.__init__(self)
+        self.keep_running = True
+        self.line_mode = self.LINEMODE_CHAR
+        self._input_callback = input_callback
+        
+    def run(self):
+        while True:
+            data = None
+            if self.line_mode is self.LINEMODE_CHAR:
+                data = sys.stdin.read(1)
+            else
+                data = sys.stdin.readline()
+            self._input_callback(data)
+
 class Cli_Player(object):
     def __init__(self):
+        self._init_gs_client()
+        self._init_player()
+        self._init_input_handler()
+
+    def run(self):
+        gobject.threads_init()
+        glib.MainLoop().run()
+
+    def _init_gs_client(self):
         self._gs_client = grooveshark.Client()
+        self._gs_client.init()
+
+    def _init_player(self):
         self._player = gst.element_factory_make('playbin2', 'player')
         self._player.set_property('video-sink',
             gst.element_factory_make('fakesink', 'fakesink'))
         message_bus = self._player.get_bus()
         message_bus.add_signal_watch()
         message_bus.connect('message', self._on_message)
+
+    def _on_input(self, data):
+        print 'Got input: %s' % data
 
     def _on_message(self, bus, message):
         if message.type == gst.MESSAGE_EOS:
@@ -31,10 +64,12 @@ class Cli_Player(object):
             sys.stderr.write( 'Error: %s\nDebug: %s\n' % (err, debug))
             self.playing = False
 
+    def _on_input(self, data):
+        pass
+
     def start(self):
         self.playing = True
-        self._gs_client
-        self._player.set_property('uri', uri)
+        self._player.set_property('uri', song.stream.url)
         self._player.set_state(gst.STATE_PLAYING)
         while self.playing:
             try:
@@ -49,10 +84,5 @@ class Cli_Player(object):
         main_loop.quit()
 
 if __name__ == '__main__':
-    thread.start_new_thread(Cli_Player().start, ())
-    gobject.threads_init()
-    main_loop = glib.MainLoop()
-    try:
-        main_loop.run()
-    except KeyboardInterrupt:
-        pass
+    #thread.start_new_thread(Cli_Player().start, ())
+    Cli_Player().run()
