@@ -16,7 +16,7 @@ class InputHandlerThread(threading.Thread):
     LINEMODE_LINE   = 1
     
     def __init__(self, input_callback):
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
         self.keep_running = True
         self.line_mode = self.LINEMODE_CHAR
         self._input_callback = input_callback
@@ -24,9 +24,9 @@ class InputHandlerThread(threading.Thread):
     def run(self):
         while True:
             data = None
-            if self.line_mode is self.LINEMODE_CHAR:
+            if self.line_mode is self.LINEMODE_LINE:
                 data = sys.stdin.read(1)
-            else
+            else:
                 data = sys.stdin.readline()
             self._input_callback(data)
 
@@ -38,7 +38,8 @@ class Cli_Player(object):
 
     def run(self):
         gobject.threads_init()
-        glib.MainLoop().run()
+        self._main_loop = glib.MainLoop()
+        self._main_loop.run()
 
     def _init_gs_client(self):
         self._gs_client = grooveshark.Client()
@@ -51,9 +52,18 @@ class Cli_Player(object):
         message_bus = self._player.get_bus()
         message_bus.add_signal_watch()
         message_bus.connect('message', self._on_message)
+    
+    def _init_input_handler(self):
+        self._input_handler = InputHandlerThread(self._on_input)
+        self._input_handler.start()
+        #self._input_handler.run()
 
     def _on_input(self, data):
         print 'Got input: %s' % data
+        songs = self._gs_client.search(data, grooveshark.SEARCH_TYPE_SONGS)
+        song = next(songs)
+        print 'Found song: %s' % song.name
+        self.play_url(song.stream.url)
 
     def _on_message(self, bus, message):
         if message.type == gst.MESSAGE_EOS:
@@ -64,12 +74,9 @@ class Cli_Player(object):
             sys.stderr.write( 'Error: %s\nDebug: %s\n' % (err, debug))
             self.playing = False
 
-    def _on_input(self, data):
-        pass
-
-    def start(self):
-        self.playing = True
-        self._player.set_property('uri', song.stream.url)
+    def play_url(self, url):
+        self.stop()
+        self._player.set_property('uri', url)
         self._player.set_state(gst.STATE_PLAYING)
         while self.playing:
             try:
@@ -81,7 +88,10 @@ class Cli_Player(object):
                 sys.stdout.flush()
             time.sleep(0.2)
         time.sleep(1)
-        main_loop.quit()
+    
+    def stop(self):
+        self._player.set_state(gst.STATE_NULL)
+        self.playing = False
 
 if __name__ == '__main__':
     #thread.start_new_thread(Cli_Player().start, ())
